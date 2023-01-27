@@ -9,6 +9,7 @@ playersDB = {}
 local selectedPlayer = {}
 local userRankIndex = -1
 local overrideMinRank = false
+local versionsDict = {}
 
 local cebistracker = LibStub("AceAddon-3.0"):NewAddon("CEBiSTracker", "AceComm-3.0", "AceEvent-3.0", "AceHook-3.0", "AceSerializer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
@@ -36,6 +37,20 @@ local function pairsByKeys(t, f)
         end
     end
     return iter
+end
+
+function cebistracker:GetMyClassColor()
+    local color = RAID_CLASS_COLORS[UnitClass("player"):upper()]
+    return color.colorStr
+end
+
+--GetPlayerByName Function
+function cebistracker:GetPlayerByName(name)
+    for _, player in pairs(playersDB) do
+        if player.name == name then
+            return player
+        end
+    end
 end
 
 function cebistracker:GetPermission()
@@ -212,6 +227,11 @@ function cebistracker:SendComm(message)
 	self:SendCommMessage("cebistracker", messageSerialized, "GUILD")
 end
 
+function cebistracker:SendCommTo(message, player)
+    local messageSerialized = LD:EncodeForWoWAddonChannel(LD:CompressDeflate(self:Serialize(message)))
+	self:SendCommMessage("cebistracker", messageSerialized, "WHISPER", player)
+end
+
 function cebistracker:Broadcast()
     local message = {
         key = "BROADCAST",
@@ -282,6 +302,12 @@ function cebistracker:OnCommReceived(prefix, message, distribution, sender)
             self:PopulatePlayers()
             AceGUI:Release(self.broadcastConfirm)
             self.broadcastConfirm = nil
+            local returnMessage = {
+                key = "BROADCAST_ACCEPTED",
+                sender = UnitName("player"),
+                senderColor = self:GetMyClassColor()
+            }
+            self:SendCommTo(returnMessage, sender)
         end)
         local noButton = AceGUI:Create("Button")
         noButton:SetText("No")
@@ -309,26 +335,93 @@ function cebistracker:OnCommReceived(prefix, message, distribution, sender)
     elseif key == "ADDCHECK" then
         local value = message["value"]
         local affectedPlayer = message["player"]
+        local found = false
         for _, player in pairs(playersDB) do
             if player.name == affectedPlayer then
                 if selectedPlayer and selectedPlayer.name == affectedPlayer then
                     gearButtons[gearNameToIndex[value]].checkbox:SetValue(true)
                 end
                 player.items[value] = true
+                found = true
                 break
             end
+        end
+        if not found then
+            local returnMessage = {
+                key = "MISSING_PLAYER",
+                sender = UnitName("player"),
+                player = affectedPlayer
+            }
+            self:SendCommTo(returnMessage, sender)
         end
     elseif key == "REMOVECHECK" then
         local value = message["value"]
         local affectedPlayer = message["player"]
+        local found = false
         for _, player in pairs(playersDB) do
             if player.name == affectedPlayer then
                 if selectedPlayer and selectedPlayer.name == affectedPlayer then
                     gearButtons[gearNameToIndex[value]].checkbox:SetValue(false)
                 end
                 table.removekey(player.items, value)
+                found = true
                 break
             end
+        end
+        if not found then
+            local returnMessage = {
+                key = "MISSING_PLAYER",
+                sender = UnitName("player"),
+                player = affectedPlayer
+            }
+            self:SendCommTo(returnMessage, sender)
+        end
+    elseif key == "BROADCAST_ACCEPTED" then
+        local sender = message["sender"]
+        local senderColor = message["senderColor"]
+        print("|cFFFF7D0ACEBiSTracker:|r Broadcast accepted by |c" .. senderColor .. sender .. "|r")
+    elseif key == "VERSION" then
+        local version = GetAddOnMetadata("CEBiSTracker", "Version")
+        local sender = message["sender"]
+        local returnMessage = {
+            key = "VERSION_RESPONSE",
+            value = version,
+            sender = UnitName("player"),
+            senderColor = self:GetMyClassColor()
+        }
+        self:SendCommTo(returnMessage, sender)
+    elseif key == "VERSION_RESPONSE" then
+        local version = message["value"]
+        local sender = message["sender"]
+        local senderColor = message["senderColor"]
+        if versionsDict[version] then
+            versionsDict[version] = versionsDict[version] .. ", |c" .. senderColor .. sender .. "|r"
+        else
+            versionsDict[version] = "|c" .. senderColor .. sender .. "|r"
+        end
+    elseif key == "MISSING_PLAYER" then
+        local sender = message["sender"]
+        local affectedPlayer = message["player"]
+        local player = self:GetPlayerByName(affectedPlayer)
+        local returnMessage = {
+            key = "PLAYER_INFO",
+            sender = UnitName("player"),
+            player = player
+        }
+        self:SendCommTo(returnMessage, sender)
+    elseif key == "PLAYER_INFO" then
+        local sender = message["sender"]
+        local player = message["player"]
+        local found = false
+        for _, p in pairs(playersDB) do
+            if p.name == player.name then
+                found = true
+                break
+            end
+        end
+        if not found then
+            table.insert(playersDB, player)
+            self:PopulatePlayers()
         end
     end
 end
@@ -550,7 +643,36 @@ local SLASH_CMD_FUNCTIONS = {
         cebistracker.editRank:SetValue(1)
         overrideMinRank = false
         cebistracker:PopulatePlayers()
-	end
+	end,
+    ["SHOW"] = function (args)
+        cebistracker.f:Show()
+    end,
+    ["HIDE"] = function (args)
+        cebistracker.f:Hide()
+    end,
+    ["VERSION"] = function (args)
+        versionsDict = {}
+        versionsDict[GetAddOnMetadata("CEBiSTracker", "Version")] = "|c" .. cebistracker:GetMyClassColor() .. UnitName("player") .. "|r"
+        local message = {
+            key = "VERSION",
+            sender = UnitName("player")
+        }
+        cebistracker:SendComm(message)
+        C_Timer.After(1, function() 
+            print("|cFFFF7D0ACEBiSTracker|r Versions in Use:")
+            for version, users in pairs(versionsDict) do
+                print("     |cFFFF7D0A" .. version .. "|r: " .. users)
+            end
+        end)
+
+    end,
+    ["HELP"] = function (args)
+        print("Casual Encounter BIS Tracker Slash Commands:")
+        print("|cFFFF7D0A/cbt clear|r - Clears all data")
+        print("|cFFFF7D0A/cbt show|r - Shows the main window")
+        print("|cFFFF7D0A/cbt hide|r - Hides the main window")
+        print("|cFFFF7D0A/cbt version|r - Shows the version of CEBiSTracker in use by everyone in the raid")
+    end,
 }
 
 SLASH_CBT1 = "/cebistracker"
