@@ -24,6 +24,64 @@ function table.removekey(t, key)
     return element
 end
 
+-- local A1, A2 = 727595, 798405  -- 5^17=D20*A1+A2
+-- local D20, D40 = 1048576, 1099511627776  -- 2^20, 2^40
+-- local X1, X2 = 0, 1
+-- --math.randomseed(os.time())
+
+-- function cebistracker:GetRandom()
+--     local U = X2*A2
+--     local V = (X1*A2 + X2*A1) % D20
+--     V = (V*D20 + U) % D40
+--     X1 = math.floor(V/D20)
+--     X2 = V - X1*D20
+--     return V/D40
+-- end
+
+function cebistracker:GetRandomInt()
+    return math.floor(math.random() * 10)
+end
+
+function cebistracker:GetRandomLetter()
+    local letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    local int = math.floor(math.random() * 26)
+    return letters:sub(int + 1, int + 1)
+end
+
+function cebistracker:GetRandomLetterOrInt()
+    local int = self:GetRandomInt()
+    if int < 5 then
+        return self:GetRandomInt()
+    else
+        return self:GetRandomLetter()    
+
+    end
+end
+
+function cebistracker:GetGUID()
+    local guid = ""
+    for _ = 1, 8 do
+        guid = guid .. self:GetRandomLetterOrInt()
+    end
+    guid = guid .. "-"
+    for _ = 1, 4 do
+        guid = guid .. self:GetRandomLetterOrInt()
+    end
+    guid = guid .. "-"
+    for _ = 1, 4 do
+        guid = guid .. self:GetRandomLetterOrInt()
+    end
+    guid = guid .. "-"
+    for _ = 1, 4 do
+        guid = guid .. self:GetRandomLetterOrInt()
+    end
+    guid = guid .. "-"
+    for _ = 1, 12 do
+        guid = guid .. self:GetRandomLetterOrInt()
+    end
+    return guid
+end
+
 --pairsByKeys Function
 local function pairsByKeys(t, f)
     local a = {}
@@ -333,6 +391,10 @@ function cebistracker:OnCommReceived(prefix, message, distribution, sender)
         self.broadcastConfirm:SetLayout("ConfirmBroadcastLayout")
         self.broadcastConfirm:DoLayout()
     elseif key == "ADDCHECK" then
+        local baseGUID = message["baseGUID"]
+        if cbtConfigDB.baseGUID and baseGUID ~= cbtConfigDB.baseGUID then
+            return
+        end
         local value = message["value"]
         local affectedPlayer = message["player"]
         local found = false
@@ -355,6 +417,10 @@ function cebistracker:OnCommReceived(prefix, message, distribution, sender)
             self:SendCommTo(returnMessage, sender)
         end
     elseif key == "REMOVECHECK" then
+        local baseGUID = message["baseGUID"]
+        if cbtConfigDB.baseGUID and baseGUID ~= cbtConfigDB.baseGUID then
+            return
+        end
         local value = message["value"]
         local affectedPlayer = message["player"]
         local found = false
@@ -552,7 +618,8 @@ function cebistracker:OnEnable()
                     key = messageKey,
                     sender = UnitName("player"),
                     player = selectedPlayer.name,
-                    value = obj.name
+                    value = obj.name,
+                    baseGUID = cbtConfigDB.baseGUID
                 }
                 self:SendComm(message)
             end
@@ -580,6 +647,9 @@ function cebistracker:OnEnable()
     self.editRank:SetList(guildList)
     if not cbtConfigDB.editRank then
         cbtConfigDB.editRank = 1
+    end
+    if not cbtConfigDB.baseGUID then
+        cbtConfigDB.baseGUID = self:GetGUID()
     end
     self.editRank:SetValue(cbtConfigDB.editRank)
     self.editRank:SetCallback("OnValueChanged", function(_, _, value)
@@ -638,6 +708,7 @@ local SLASH_CMD_FUNCTIONS = {
         playersDB = {}
         cbtConfigDB = {
             editRank = 1,
+            baseGUID = cebistracker:GetGUID()
         }
         overrideMinRank = true
         cebistracker.editRank:SetValue(1)
@@ -666,12 +737,16 @@ local SLASH_CMD_FUNCTIONS = {
         end)
 
     end,
+    ["GUID"] = function (args)
+        print("|cFFFF7D0ABase GUID:|r " .. cbtConfigDB.baseGUID)
+    end,
     ["HELP"] = function (args)
         print("Casual Encounter BIS Tracker Slash Commands:")
         print("|cFFFF7D0A/cbt clear|r - Clears all data")
         print("|cFFFF7D0A/cbt show|r - Shows the main window")
         print("|cFFFF7D0A/cbt hide|r - Hides the main window")
         print("|cFFFF7D0A/cbt version|r - Shows the version of CEBiSTracker in use by everyone in the raid")
+        print("|cFFFF7D0A/cbt guid|r - Shows the base GUID of your current data")
     end,
 }
 
