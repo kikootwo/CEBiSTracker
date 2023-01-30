@@ -1,0 +1,1 @@
+V1.3 - Add checking which users are subscribed to your GUID

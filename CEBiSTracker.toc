@@ -1,7 +1,7 @@
 ## Title: CEBiSTracker
 ## Author: kikootwo
 ## Notes: World of Warcraft Classic Addon to track gear slots where BiS was received by the raid
-## Version: 1.2
+## Version: 1.3
 ## Interface: 30401
 ## SavedVariables: cbtConfigDB, ceMinimapDB, playersDB
 

@@ -10,6 +10,7 @@ local selectedPlayer = {}
 local userRankIndex = -1
 local overrideMinRank = false
 local versionsDict = {}
+local subscribers = ""
 
 local cebistracker = LibStub("AceAddon-3.0"):NewAddon("CEBiSTracker", "AceComm-3.0", "AceEvent-3.0", "AceHook-3.0", "AceSerializer-3.0")
 local AceGUI = LibStub("AceGUI-3.0")
@@ -465,6 +466,27 @@ function cebistracker:OnCommReceived(prefix, message, distribution, sender)
         else
             versionsDict[version] = "|c" .. senderColor .. sender .. "|r"
         end
+    elseif key == "GUID" then
+        local guid = message["GUID"]
+        local sender = message["sender"]
+        if not cbtConfigDB.baseGUID or guid ~= cbtConfigDB.baseGUID then
+            return
+        end
+        local returnMessage = {
+            key = "GUID_RESPONSE",
+            GUID = cbtConfigDB.baseGUID,
+            sender = UnitName("player"),
+            senderColor = self:GetMyClassColor()
+        }
+        self:SendCommTo(returnMessage, sender)
+    elseif key == "GUID_RESPONSE" then
+        local guid = message["GUID"]
+        local sender = message["sender"]
+        local senderColor = message["senderColor"]
+        if guid ~= cbtConfigDB.baseGUID then
+            return
+        end
+        subscribers = subscribers .. ", |c" .. senderColor .. sender .. "|r"
     elseif key == "MISSING_PLAYER" then
         local sender = message["sender"]
         local affectedPlayer = message["player"]
@@ -738,7 +760,17 @@ local SLASH_CMD_FUNCTIONS = {
 
     end,
     ["GUID"] = function (args)
-        print("|cFFFF7D0ABase GUID:|r " .. cbtConfigDB.baseGUID)
+        subscribers = ""
+        subscribers = "|c" .. cebistracker:GetMyClassColor() .. UnitName("player") .. "|r"
+        local message = {
+            key = "GUID",
+            sender = UnitName("player"),
+            GUID = cbtConfigDB.baseGUID
+        }
+        cebistracker:SendComm(message)
+        C_Timer.After(1, function() 
+            print("|cFFFF7D0ACEBiSTracker|r Subscribers to |cFFFF7D0A" .. cbtConfigDB.baseGUID .. "|r:" .. subscribers) 
+        end)
     end,
     ["HELP"] = function (args)
         print("Casual Encounter BIS Tracker Slash Commands:")
@@ -746,7 +778,7 @@ local SLASH_CMD_FUNCTIONS = {
         print("|cFFFF7D0A/cbt show|r - Shows the main window")
         print("|cFFFF7D0A/cbt hide|r - Hides the main window")
         print("|cFFFF7D0A/cbt version|r - Shows the version of CEBiSTracker in use by everyone in the raid")
-        print("|cFFFF7D0A/cbt guid|r - Shows the base GUID of your current data")
+        print("|cFFFF7D0A/cbt guid|r - Shows the users currently subscribed to your guid")
     end,
 }
 
